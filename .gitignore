@@ -1,3 +1,9 @@
+# credential files
+*.env
+# test files
+test.py
+testidea.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
