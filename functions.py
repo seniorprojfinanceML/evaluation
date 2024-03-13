@@ -1,28 +1,32 @@
-from datetime import datetime
-import config, requests, psycopg2
+from datetime import datetime, date
+import config, requests, psycopg2, os, csv
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn import metrics
-
+from binance_historical_data import BinanceDataDumper
+from transform import transform
 class evaluation:
-    def __init__(self, startDate: datetime, table = None, currency = None) -> None:
+    def __init__(self, startDate: datetime, table = None, currency = None, query = True, url = None) -> None:
         # when created, query the database, preprocess, and call the model api
         # raise error if both table and currency are not provided
         # raise error if the query data is not large enough to perform analytics (<= 1440 rows)
-        if table is None and currency is None:
-            raise ValueError("At least one of 'table' or 'currency' must be provided in the constructor.")
-        print(f"analysis is done at {datetime.now()}")
-        self.table = table if table is not None else f"crypto_ind_{currency}"
-        self.startDate = startDate
-        print("querying")
-        self.df = self.query()
-        if len(self.df["time"]) <= 1440:
-            raise ValueError("The provided startDate must precede the latest data in the data warehouse by at least one day.")
-        print("processing")
-        self.input, self.actual = self.preprocess()
-        print("requesting to the model server")
-        self.pred = self.predict()
-        print("completed")
+        # if query is false, do not call any methods
+        self.url = url if url is not None else config.MODEL_URL
+        if query:
+            if table is None and currency is None:
+                raise ValueError("At least one of 'table' or 'currency' must be provided in the constructor.")
+            print(f"analysis is done at {datetime.now()}")
+            self.table = table if table is not None else f"crypto_ind_{currency}"
+            self.startDate = startDate
+            print("querying")
+            self.df = self.query()
+            if len(self.df["time"]) <= 1440:
+                raise ValueError("The provided startDate must precede the latest data in the data warehouse by at least one day.")
+            print("processing")
+            self.input, self.actual = self.preprocess()
+            print("requesting to the model server")
+            self.pred = self.predict()
+            print("completed")
         
         
 
@@ -54,7 +58,7 @@ class evaluation:
         x = x[['close_minmax_scale', 'ma7_25h_scale',
                'ma25_99h_scale', 'ma7_25d_scale']]
         x = x.values
-        close = self.df["close"]
+        close = list(self.df["close"])
         # calculate the growth of the close price respectively to the previous day
         y = []
         for i in range(len(self.df) - 1440):
@@ -65,9 +69,8 @@ class evaluation:
         # call the api to the model hosting server (url from env file)
         # request_body is numpy array with shape of (n, 4)
         # response body is a list of predicted growth (percentage)
-        url = config.MODEL_URL
         # print(self.input)
-        response = requests.post(url, json = self.input.tolist())
+        response = requests.post(self.url, json = self.input.tolist())
         if response.status_code == 200:
             return response.json()
             # print("requested")
@@ -117,3 +120,79 @@ class evaluation:
         accuracy = 0
         performance = -1e9
         return {"accuracy": accuracy, "cum_performance": performance}
+    
+class localEvaluation(evaluation):
+    def __init__(self, currency: str, url=None):
+        super().__init__(startDate=None, query=False, url=url)
+        self.currency = currency
+        self.raw_data = self.load_csv()
+        self.raw_data.set_index('time', inplace=True)
+        self.df = self.transform()
+        if len(self.df["time"]) <= 1440:
+            raise ValueError("The provided startDate must precede the latest data in the data warehouse by at least one day.")
+        print("processing")
+        self.input, self.actual = self.preprocess()
+        print("requesting to the model server")
+        self.pred = self.predict()
+        print("completed")
+        
+    @staticmethod
+    def download_data(currency:str, startDate: date):
+        data_dumper = BinanceDataDumper(
+            path_dir_where_to_dump=".",
+            asset_class="spot",  # spot, um, cm
+            data_type="klines",  # aggTrades, klines, trades
+            data_frequency="1m",
+        )
+        # print(startDate)
+        data_dumper.dump_data(
+        tickers=[currency],
+        date_start=startDate,
+        date_end=None,
+        is_to_update_existing=True,
+        tickers_to_exclude=["UST"]
+        )
+        
+    @staticmethod
+    def readfiles(dir_path, files, currency):
+        return_df = pd.DataFrame()
+        for file in files:
+            with open(rf"{dir_path}\{file}", 'r', newline='') as f:
+                reader = csv.reader(f)
+                data = list(reader)
+                selected_data = [
+                    {
+                        "currency":currency,
+                        "time":datetime.utcfromtimestamp(int(row[0])/1000),
+                        "open":row[1],
+                        "high":row[2],
+                        "low":row[3],
+                        "close":row[4],
+                        "volume":row[5]
+                    }
+                    for row in data]
+                df = pd.DataFrame(selected_data)
+                return_df = pd.concat([return_df, df], ignore_index=True)
+        return return_df
+    
+    def load_csv(self):
+        currency = self.currency
+        df = pd.DataFrame()
+        dir_path = rf".\spot\daily\klines\{currency}\1m"
+        files = os.listdir(dir_path)
+        temp = localEvaluation.readfiles(currency=currency, dir_path=dir_path, files=files)
+        df = pd.concat([temp, df], ignore_index=True)
+        dir_path = rf".\spot\monthly\klines\{currency}\1m"
+        files = os.listdir(dir_path)
+        temp = localEvaluation.readfiles(currency=currency, dir_path=dir_path, files=files)
+        df = pd.concat([temp, df], ignore_index=True)
+        df["close"] = df["close"].astype(float)
+        return df
+    
+    def transform(self):
+        df = transform(self.raw_data)
+        df.dropna(inplace=True)
+        df.reset_index(inplace=True)
+        # print(df.columns)
+        return df
+    
