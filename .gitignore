@@ -3,6 +3,8 @@
 # test files
 test.py
 testidea.py
+# data folder
+spot/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
