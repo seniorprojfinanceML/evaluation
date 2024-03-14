@@ -1,5 +1,5 @@
 from datetime import datetime, date
-import config, requests, psycopg2, os, csv
+import config, requests, psycopg2, os, csv, pytz
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn import metrics
@@ -163,7 +163,7 @@ class LocalEvaluation(Evaluation):
                 selected_data = [
                     {
                         "currency":currency,
-                        "time":datetime.utcfromtimestamp(int(row[0])/1000),
+                        "time":datetime.fromtimestamp((int(row[0])/1000), tz=pytz.UTC),
                         "open":row[1],
                         "high":row[2],
                         "low":row[3],
