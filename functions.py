@@ -5,7 +5,7 @@ import pandas as pd
 from sklearn import metrics
 from binance_historical_data import BinanceDataDumper
 from transform import transform
-class evaluation:
+class Evaluation:
     def __init__(self, startDate: datetime, table = None, currency = None, query = True, url = None) -> None:
         # when created, query the database, preprocess, and call the model api
         # raise error if both table and currency are not provided
@@ -121,7 +121,7 @@ class evaluation:
         performance = -1e9
         return {"accuracy": accuracy, "cum_performance": performance}
     
-class localEvaluation(evaluation):
+class LocalEvaluation(Evaluation):
     def __init__(self, currency: str, url=None):
         super().__init__(startDate=None, query=False, url=url)
         self.currency = currency
@@ -180,11 +180,11 @@ class localEvaluation(evaluation):
         df = pd.DataFrame()
         dir_path = rf".\spot\daily\klines\{currency}\1m"
         files = os.listdir(dir_path)
-        temp = localEvaluation.readfiles(currency=currency, dir_path=dir_path, files=files)
+        temp = LocalEvaluation.readfiles(currency=currency, dir_path=dir_path, files=files)
         df = pd.concat([temp, df], ignore_index=True)
         dir_path = rf".\spot\monthly\klines\{currency}\1m"
         files = os.listdir(dir_path)
-        temp = localEvaluation.readfiles(currency=currency, dir_path=dir_path, files=files)
+        temp = LocalEvaluation.readfiles(currency=currency, dir_path=dir_path, files=files)
         df = pd.concat([temp, df], ignore_index=True)
         df["close"] = df["close"].astype(float)
         return df
