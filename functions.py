@@ -6,12 +6,17 @@ from sklearn import metrics
 from binance_historical_data import BinanceDataDumper
 from transform import transform
 class Evaluation:
-    def __init__(self, startDate: datetime, table = None, currency = None, query = True, url = None) -> None:
+    def __init__(self, startDate: datetime, table = None, currency = None,
+                 query = True, url = None, model = None, version = None, alias = None) -> None:
         # when created, query the database, preprocess, and call the model api
         # raise error if both table and currency are not provided
         # raise error if the query data is not large enough to perform analytics (<= 1440 rows)
         # if query is false, do not call any methods
         self.url = url if url is not None else config.MODEL_URL
+        self.model = model
+        self.version = version
+        self.alias = alias
+
         if query:
             if table is None and currency is None:
                 raise ValueError("At least one of 'table' or 'currency' must be provided in the constructor.")
@@ -70,7 +75,16 @@ class Evaluation:
         # request_body is numpy array with shape of (n, 4)
         # response body is a list of predicted growth (percentage)
         # print(self.input)
-        response = requests.post(self.url, json = self.input.tolist())
+        req_body = {
+            'input': self.input.tolist()
+        }
+        if self.model is not None:
+            req_body["model"] = self.model
+        if self.version is not None:
+            req_body["version"] = self.version
+        if self.alias is not None:
+            req_body["alias"] = self.alias
+        response = requests.post(self.url, json = req_body)
         if response.status_code == 200:
             return response.json()
             # print("requested")
@@ -122,8 +136,8 @@ class Evaluation:
         return {"accuracy": accuracy, "cum_performance": performance}
     
 class LocalEvaluation(Evaluation):
-    def __init__(self, currency: str, url=None):
-        super().__init__(startDate=None, query=False, url=url)
+    def __init__(self, currency: str, url=None, model = None, version = None, alias = None):
+        super().__init__(startDate=None, query=False, url=url, model = None, version = None, alias = None)
         self.currency = currency
         self.raw_data = self.load_csv()
         self.raw_data.set_index('time', inplace=True)
