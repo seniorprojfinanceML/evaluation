@@ -137,7 +137,7 @@ class Evaluation:
     
 class LocalEvaluation(Evaluation):
     def __init__(self, currency: str, url=None, model = None, version = None, alias = None):
-        super().__init__(startDate=None, query=False, url=url, model = None, version = None, alias = None)
+        super().__init__(startDate=None, query=False, url=url, model = model, version = version, alias = alias)
         self.currency = currency
         self.raw_data = self.load_csv()
         self.raw_data.set_index('time', inplace=True)
