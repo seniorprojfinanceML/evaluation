@@ -1,13 +1,14 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import config, requests, psycopg2, os, csv, pytz
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn import metrics
+from sklearn.metrics import mean_squared_error
 from binance_historical_data import BinanceDataDumper
 from transform import transform
 class Evaluation:
     def __init__(self, startDate: datetime, table = None, currency = None,
-                 query = True, url = None, model = None, version = None, alias = None) -> None:
+                 query = True, url = None, model = "CBR", version = None, alias = None) -> None:
         # when created, query the database, preprocess, and call the model api
         # raise error if both table and currency are not provided
         # raise error if the query data is not large enough to perform analytics (<= 1440 rows)
@@ -24,11 +25,11 @@ class Evaluation:
             self.table = table if table is not None else f"crypto_ind_{currency}"
             self.startDate = startDate
             print("querying")
-            self.df = self.query()
+            self.input, self.df = self.query()
             if len(self.df["time"]) <= 1440:
                 raise ValueError("The provided startDate must precede the latest data in the data warehouse by at least one day.")
             print("processing")
-            self.input, self.actual = self.preprocess()
+            self.actual = self.preprocess()
             print("requesting to the model server")
             self.pred = self.predict()
             print("completed")
@@ -46,29 +47,40 @@ class Evaluation:
             host=config.DATABASE_HOST,
             port=5432)
         cursor = conn.cursor()
-        query = f"""SELECT time, currency, close, close_minmax_scale,
+        query = f"""SELECT time, currency, close,
         ma7_25h_scale, ma25_99h_scale, ma7_25d_scale from {self.table} where time >= '{self.startDate}'"""
         cursor.execute(query = query)
         results = cursor.fetchall()
-        columns = ['time', 'currency','close' ,'close_minmax_scale',
+        columns = ['time', 'currency','close',
                    'ma7_25h_scale', 'ma25_99h_scale', 'ma7_25d_scale']
+        
+        query = f"""SELECT close_minmax_scale, time from {self.table} where time >= '{(self.startDate)-timedelta(days=28)}'"""
+        cursor.execute(query = query)
+        price_results = cursor.fetchall()
+        # print(price_results[:6])
+        
+        time_diff = [1, 25, 49, 73, 97, 121, 145, 169, 193, 217, 241, 265, 289, 313, 337, 361, 385, 409, 433, 467, 491, 515, 539, 563, 587, 611, 635, 672]
+        
+        x = []
+        for i in range (len(results)-1440):
+            l = []
+            l.append(price_results[i+672][0])
+            l.extend([results[i][3],results[i][4],results[i][5]])
+            for e in time_diff:
+                l.append(price_results[i+672-e][0])
+            x.append(l)
         dataframe = pd.DataFrame([dict(zip(columns, result)) for result in results])
         cursor.close()
         conn.close()
-        return dataframe
+        return x, dataframe
     
     def preprocess(self):
-        # extract the indicators from the query results
-        x = self.df.iloc[:-1440]
-        x = x[['close_minmax_scale', 'ma7_25h_scale',
-               'ma25_99h_scale', 'ma7_25d_scale']]
-        x = x.values
         close = list(self.df["close"])
         # calculate the growth of the close price respectively to the previous day
         y = []
         for i in range(len(self.df) - 1440):
             y.append((close[i+1440]-close[i])/close[i])
-        return x, y
+        return y
     
     def predict(self):
         # call the api to the model hosting server (url from env file)
@@ -76,7 +88,7 @@ class Evaluation:
         # response body is a list of predicted growth (percentage)
         # print(self.input)
         req_body = {
-            'input': self.input.tolist()
+            'input': self.input
         }
         if self.model is not None:
             req_body["model"] = self.model
@@ -127,13 +139,8 @@ class Evaluation:
         report = metrics.classification_report(self.actual_class, self.pred_class)
         return report
     
-    def invest(self, thresh = 0):
-        # to be implemented later
-        # calculate accuracy of model concerning pred higher than threshold
-        # calculate cumulative percentage gain and loss if invest only when pred higher than threshold
-        accuracy = 0
-        performance = -1e9
-        return {"accuracy": accuracy, "cum_performance": performance}
+    def mse(self):
+        return mean_squared_error(self.actual, self.pred)
     
 class LocalEvaluation(Evaluation):
     def __init__(self, currency: str, url=None, model = None, version = None, alias = None):
