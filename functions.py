@@ -62,12 +62,15 @@ class Evaluation:
         time_diff = [1, 25, 49, 73, 97, 121, 145, 169, 193, 217, 241, 265, 289, 313, 337, 361, 385, 409, 433, 467, 491, 515, 539, 563, 587, 611, 635, 672]
         
         x = []
+        # -1440 to ensure that the last day data is not used in the evaluaton (Since we will not have the actual growth for these values)
         for i in range (len(results)-1440):
             l = []
-            l.append(price_results[i+672][0])
+            # Since price_results start from -672hrs, i+40320 => price at the current time
+            l.append(price_results[i+40320][0])
             l.extend([results[i][3],results[i][4],results[i][5]])
+            # i+672 => current time so i+40320-60 => price from -1 hour
             for e in time_diff:
-                l.append(price_results[i+672-e][0])
+                l.append(price_results[i+40320-e*60][0])
             x.append(l)
         dataframe = pd.DataFrame([dict(zip(columns, result)) for result in results])
         cursor.close()
