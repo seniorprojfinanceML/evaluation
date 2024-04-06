@@ -65,16 +65,16 @@ class Evaluation:
         # -1440 to ensure that the last day data is not used in the evaluaton (Since we will not have the actual growth for these values)
         for i in range (len(results)-1440):
             l = []
-            t = []
+            # t = []
             # Since price_results start from -672hrs, i+40320 => price at the current time
             l.append(price_results[i+40320][0])
-            t.append(price_results[i+40320][1])
+            # t.append(price_results[i+40320][1])
             l.extend([results[i][3],results[i][4],results[i][5]])
             # i+672 => current time so i+40320-60 => price from -1 hour
             for e in time_diff:
                 l.append(price_results[i+40320-e*60][0])
-                t.append(price_results[i+40320-e*60][1])
-            print(t)
+                # t.append(price_results[i+40320-e*60][1])
+            # print(t)
             x.append(l)
         dataframe = pd.DataFrame([dict(zip(columns, result)) for result in results])
         cursor.close()
@@ -117,12 +117,12 @@ class Evaluation:
         x = list(df["time"][1440:])
 
         # Plotting the line
-        plt.plot(x, self.actual, label='Actual growth')
-        plt.plot(x, self.pred, label='Predicted growth')
+        plt.plot(x, self.actual, label='Actual relative price')
+        plt.plot(x, self.pred, label='Predicted relative price')
         plt.xlabel('Time')
         plt.xticks(rotation=45)
         plt.ylabel('Growth')
-        plt.title(f'Comparison between predicted and actual growth of {df["currency"][0]}')
+        plt.title(f'Comparison between predicted and actual growth of {df["currency"][0]} with {self.model}')
         plt.legend()
         plt.show()
 
@@ -144,6 +144,7 @@ class Evaluation:
         self.actual_class = [1 if e >= 0 else 0 for e in self.actual]
         self.pred_class = [1 if e >= 0 else 0 for e in self.pred]
         report = metrics.classification_report(self.actual_class, self.pred_class)
+        print(f"Classification report for {self.model} model")
         return report
     
     def mse(self):
