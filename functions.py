@@ -66,9 +66,11 @@ class Evaluation:
         for i in range (len(results)-1440):
             l = []
             # t = []
+            # 28 days = 24*28 = 672 hours = 672*60 minutes = 40320 minutes
             # Since price_results start from -672hrs, i+40320 => price at the current time
             l.append(price_results[i+40320][0])
             # t.append(price_results[i+40320][1])
+            # append the indicator values: ma7_25h_scale, ma25_99h_scale, ma7_25d_scale
             l.extend([results[i][3],results[i][4],results[i][5]])
             # i+672 => current time so i+40320-60 => price from -1 hour
             for e in time_diff:
